@@ -1,0 +1,16 @@
+{
+  "name": "react-opencode",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "volta": {
+    "node": "24.21.0"
+  }
+}
