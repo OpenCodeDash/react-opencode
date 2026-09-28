@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>react-opencode demo</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; background: #fafafa; color: #111; }
+      #app { max-width: 720px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+      .row { display: flex; gap: 8px; align-items: center; }
+      .badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #ddd; }
+      .badge.on { background: #1a7f37; color: white; }
+      .badge.off { background: #cf222e; color: white; }
+      ul { list-style: none; padding: 0; margin: 0; }
+      li { padding: 6px 8px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; }
+      li.active { background: #ddf4ff; }
+      li button { border: none; background: none; color: #cf222e; cursor: pointer; }
+      #messages { border: 1px solid #ddd; border-radius: 8px; padding: 8px; min-height: 160px; display: flex; flex-direction: column; gap: 8px; background: white; }
+      .msg { border-radius: 6px; padding: 6px 10px; max-width: 80%; }
+      .msg.user { background: #ddf4ff; align-self: flex-end; }
+      .msg.assistant { background: #f6f8fa; align-self: flex-start; }
+      .msg .role { font-size: 11px; color: #666; }
+      #input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
+      button { padding: 6px 12px; border: 1px solid #ccc; border-radius: 6px; background: white; cursor: pointer; }
+      #busy { color: #9a6700; font-size: 13px; }
+      .permission { display: flex; gap: 8px; align-items: center; background: #fff8c5; padding: 8px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>
