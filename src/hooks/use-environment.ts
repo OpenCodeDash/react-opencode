@@ -42,7 +42,7 @@ export function useFileStatus(): FileStatusEntry[] {
     if (Object.keys(fileStatus).length === 0) {
       client.fileStatus().then((value) => client.store.setFileStatus(value)).catch(() => undefined)
     }
-  }, [client, fileStatus])
+  }, [client, Object.keys(fileStatus).length])
   return Object.values(fileStatus)
 }
 
@@ -64,7 +64,7 @@ export function useMcp(): Record<string, McpServerStatus> {
     if (Object.keys(mcp).length === 0) {
       client.mcpStatus().then((value) => client.store.setMcp(value)).catch(() => undefined)
     }
-  }, [client, mcp])
+  }, [client, Object.keys(mcp).length])
   return mcp
 }
 

@@ -6,6 +6,8 @@ import {
   OpenCodeClient,
   OpenCodeProvider,
   useConnected,
+  useFileStatus,
+  useMcp,
   useMessageParts,
   useMessages,
   usePermissions,
@@ -191,5 +193,41 @@ describe("useConnected", () => {
     expect(result.current).toBe(false)
     act(() => client.store.setConnected(true))
     expect(result.current).toBe(true)
+  })
+})
+
+describe("environment hooks: empty-result fetch", () => {
+  it("useFileStatus fetches once even when the result is empty (no ref-loop)", async () => {
+    const client = makeTestClient()
+    let calls = 0
+    client.fileStatus = (() => {
+      calls++
+      return Promise.resolve([])
+    }) as typeof client.fileStatus
+
+    const { result } = renderHook(() => useFileStatus(), { wrapper: wrapper(client) })
+
+    // Settle: run the mount effect, resolve the promise, commit to the store,
+    // re-render from the emitted version bump, and any effect re-runs.
+    for (let i = 0; i < 4; i++) await act(async () => await Promise.resolve())
+
+    expect(result.current).toEqual([])
+    expect(calls).toBe(1)
+  })
+
+  it("useMcp fetches once even when the result is empty (no ref-loop)", async () => {
+    const client = makeTestClient()
+    let calls = 0
+    client.mcpStatus = (() => {
+      calls++
+      return Promise.resolve({})
+    }) as typeof client.mcpStatus
+
+    const { result } = renderHook(() => useMcp(), { wrapper: wrapper(client) })
+
+    for (let i = 0; i < 4; i++) await act(async () => await Promise.resolve())
+
+    expect(result.current).toEqual({})
+    expect(calls).toBe(1)
   })
 })
