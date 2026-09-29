@@ -171,7 +171,12 @@ export class OpenCodeClient {
   }
 
   createSession(input: CreateSessionInput = {}): Promise<Session> {
-    return this.post<Session>("/session", input)
+    // The server does not emit a session.created event for this call, so keep
+    // the store in sync optimistically (idempotent if an event also arrives).
+    return this.post<Session>("/session", input).then((session) => {
+      this.store.upsertSession(session)
+      return session
+    })
   }
 
   getSession(id: SessionID) {
@@ -179,7 +184,11 @@ export class OpenCodeClient {
   }
 
   updateSession(id: SessionID, input: { title?: string; metadata?: Record<string, unknown>; time?: { archived?: number } }) {
-    return this.patch<Session>(`/session/${id}`, input)
+    // No session.updated event is emitted for this call; sync the store.
+    return this.patch<Session>(`/session/${id}`, input).then((session) => {
+      this.store.upsertSession(session)
+      return session
+    })
   }
 
   renameSession(id: SessionID, title: string) {
@@ -187,7 +196,10 @@ export class OpenCodeClient {
   }
 
   deleteSession(id: SessionID) {
-    return this.del<void>(`/session/${id}`)
+    // No session.deleted event is emitted for this call; sync the store.
+    return this.del<void>(`/session/${id}`).then(() => {
+      this.store.removeSession(id)
+    })
   }
 
   forkSession(id: SessionID, input: { messageID?: MessageID } = {}): Promise<Session> {
