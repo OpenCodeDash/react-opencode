@@ -156,4 +156,24 @@ describe("EventStream", () => {
     expect(seen).toHaveLength(1)
     expect(seen[0]!.type).toBe("t")
   })
+
+  it("unwraps /global/event envelopes to their payload", async () => {
+    const seen: EventEnvelope[] = []
+    const stream = new EventStream({
+      url: "http://test/global/event",
+      fetchImpl: async () =>
+        makeResponse(
+          200,
+          sseBody([
+            'data: {"directory":"/tmp/proj","project":"global","payload":{"id":"e1","type":"message.updated","properties":{"sessionID":"s1"}}}\n\n',
+          ]),
+        ),
+      onEvent: (e) => seen.push(e),
+      reconnect: false,
+    })
+    await stream.start()
+    expect(seen).toHaveLength(1)
+    expect(seen[0]!.type).toBe("message.updated")
+    expect(seen[0]!.properties.sessionID).toBe("s1")
+  })
 })

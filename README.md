@@ -15,7 +15,7 @@ No state library required: the store is a small external store consumed through 
 ┌────────────────┐   REST (actions, hydration)   ┌──────────────────┐
 │  OpenCodeClient │ ─────────────────────────────▶ │  opencode server  │
 │                 │ ◀───────────────────────────── │                  │
-└───────┬────────┘   SSE /event (live updates)    └──────────────────┘
+└───────┬────────┘  SSE /global/event (live)     └──────────────────┘
         │
         ▼
    Store (event-sourced collections)
