@@ -29,7 +29,7 @@ async function startMockServer(): Promise<MockServer> {
       res.end(JSON.stringify(body))
     }
 
-    if (req.method === "GET" && url.pathname === "/event") {
+    if (req.method === "GET" && (url.pathname === "/event" || url.pathname === "/global/event")) {
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",

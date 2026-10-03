@@ -140,6 +140,25 @@ describe("EventStream", () => {
     expect(seenAborts).toHaveLength(1)
   })
 
+  it("unwraps /global/event frames to the inner envelope", async () => {
+    const seen: EventEnvelope[] = []
+    const stream = new EventStream({
+      url: "http://test/global/event",
+      fetchImpl: async () =>
+        makeResponse(
+          200,
+          sseBody([
+            'data: {"directory":"/tmp","project":"p","workspace":"w","payload":{"id":"e1","type":"session.created","properties":{"sessionID":"ses_1"}}}\n\n',
+          ]),
+        ),
+      onEvent: (e) => seen.push(e),
+      reconnect: false,
+    })
+    await stream.start()
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toMatchObject({ id: "e1", type: "session.created", properties: { sessionID: "ses_1" } })
+  })
+
   it("skips malformed frames", async () => {
     const seen: EventEnvelope[] = []
     const stream = new EventStream({

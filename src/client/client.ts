@@ -118,7 +118,10 @@ export class OpenCodeClient {
   async connect(): Promise<void> {
     if (this.stream) return
     const opts: EventStreamOptions = {
-      url: `${this.url}${this.options.eventPath ?? "/event"}`,
+      // `/event` is scoped to the server's default instance (its cwd) and emits
+      // nothing for sessions in other directories; `/global/event` carries every
+      // instance's events (each GlobalEvent's `payload` is unwrapped by EventStream).
+      url: `${this.url}${this.options.eventPath ?? "/global/event"}`,
       fetchImpl: this.fetchImpl,
       onEvent: (event) => this.store.apply(event),
       onConnected: () => {
@@ -142,16 +145,31 @@ export class OpenCodeClient {
 
   private async hydrate(): Promise<void> {
     try {
-      const [sessions, status, permissions, questions] = await Promise.all([
-        this.get<Session[]>("/session").catch(() => [] as Session[]),
-        this.get<Record<SessionID, SessionStatus>>("/session/status").catch(() => ({})),
-        this.get<PermissionRequest[]>("/permission").catch(() => [] as PermissionRequest[]),
-        this.get<QuestionRequest[]>("/question").catch(() => [] as QuestionRequest[]),
-      ])
-      this.store.setSessions(sessions ?? [])
-      for (const [id, value] of Object.entries(status ?? {})) this.store.setStatus(id, value)
-      this.store.setPermissions(permissions ?? [])
-      this.store.setQuestions(questions ?? [])
+      // The session list is global, but /session/status, /permission and
+      // /question are instance-scoped: without a ?directory= param they only
+      // cover the server's default instance. Hydrate every instance that has
+      // sessions (plus the default one) and merge the results.
+      const sessions = (await this.get<Session[]>("/session").catch(() => [] as Session[])) ?? []
+      this.store.setSessions(sessions)
+      const directories = new Set<string>()
+      for (const session of sessions) if (session.directory) directories.add(session.directory)
+      const scopes: string[] = ["", ...[...directories].map((dir) => `?directory=${encodeURIComponent(dir)}`)]
+      const status: Record<SessionID, SessionStatus> = {}
+      const permissions = new Map<string, PermissionRequest>()
+      const questions = new Map<string, QuestionRequest>()
+      for (const scope of scopes) {
+        const [scopeStatus, scopePermissions, scopeQuestions] = await Promise.all([
+          this.get<Record<SessionID, SessionStatus>>(`/session/status${scope}`).catch(() => ({})),
+          this.get<PermissionRequest[]>(`/permission${scope}`).catch(() => [] as PermissionRequest[]),
+          this.get<QuestionRequest[]>(`/question${scope}`).catch(() => [] as QuestionRequest[]),
+        ])
+        for (const [id, value] of Object.entries(scopeStatus ?? {})) status[id] = value
+        for (const permission of scopePermissions ?? []) permissions.set(permission.id, permission)
+        for (const question of scopeQuestions ?? []) questions.set(question.id, question)
+      }
+      for (const [id, value] of Object.entries(status)) this.store.setStatus(id, value)
+      this.store.setPermissions([...permissions.values()])
+      this.store.setQuestions([...questions.values()])
       for (const id of this.loadedMessages) {
         await this.loadMessages(id).catch(() => undefined)
       }
@@ -295,12 +313,26 @@ export class OpenCodeClient {
 
   // ---------- Permissions & questions ----------
 
+  // Permission and question state lives in the instance (working directory)
+  // of the session that raised it. Routes without a session id in the URL —
+  // like /question/:id/reply — fall back to the server's default instance
+  // unless the client pins one, so resolve the directory from the store.
+  private instancePath(path: string, sessionID: SessionID | undefined): string {
+    const directory = sessionID ? this.store.state.sessions.find((s) => s.id === sessionID)?.directory : undefined
+    if (!directory) return path
+    return `${path}?directory=${encodeURIComponent(directory)}`
+  }
+
   listPermissions() {
     return this.get<PermissionRequest[]>("/permission")
   }
 
   replyPermission(requestID: string, reply: PermissionResponse, message?: string) {
-    return this.post<void>(`/permission/${requestID}/reply`, { reply, ...(message ? { message } : {}) })
+    const sessionID = this.store.state.permissions.find((p) => p.id === requestID)?.sessionID
+    return this.post<void>(this.instancePath(`/permission/${requestID}/reply`, sessionID), {
+      reply,
+      ...(message ? { message } : {}),
+    })
   }
 
   listQuestions() {
@@ -308,11 +340,13 @@ export class OpenCodeClient {
   }
 
   replyQuestion(requestID: string, answers: string[][]) {
-    return this.post<void>(`/question/${requestID}/reply`, { answers })
+    const sessionID = this.store.state.questions.find((q) => q.id === requestID)?.sessionID
+    return this.post<void>(this.instancePath(`/question/${requestID}/reply`, sessionID), { answers })
   }
 
   rejectQuestion(requestID: string) {
-    return this.post<void>(`/question/${requestID}/reject`)
+    const sessionID = this.store.state.questions.find((q) => q.id === requestID)?.sessionID
+    return this.post<void>(this.instancePath(`/question/${requestID}/reject`, sessionID))
   }
 
   // ---------- Catalogue ----------

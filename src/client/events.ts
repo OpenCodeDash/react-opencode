@@ -30,8 +30,10 @@ export function parseSseChunk(buffer: string): { events: string[]; rest: string 
 
 function parseEvent(raw: string): EventEnvelope | null {
   try {
-    const parsed = JSON.parse(raw) as EventEnvelope
+    const parsed = JSON.parse(raw) as EventEnvelope & { payload?: EventEnvelope }
     if (parsed && typeof parsed.type === "string") return parsed
+    // `/global/event` wraps each instance event as `{ directory, project, payload }`.
+    if (parsed?.payload && typeof parsed.payload.type === "string") return parsed.payload
     return null
   } catch {
     return null
