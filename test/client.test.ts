@@ -96,10 +96,10 @@ describe("OpenCodeClient hydration", () => {
           { status: 200, headers: { "Content-Type": "text/event-stream" } },
         )
       }
+      if (url.includes("/session/status")) return jsonResponse(200, { ses_1: { type: "busy" } })
+      if (url.includes("/permission")) return jsonResponse(200, [])
+      if (url.includes("/question")) return jsonResponse(200, [])
       if (url.endsWith("/session")) return jsonResponse(200, [session])
-      if (url.endsWith("/session/status")) return jsonResponse(200, { ses_1: { type: "busy" } })
-      if (url.endsWith("/permission")) return jsonResponse(200, [])
-      if (url.endsWith("/question")) return jsonResponse(200, [])
       return jsonResponse(404, {})
     })
     const client = new OpenCodeClient({
@@ -141,6 +141,76 @@ describe("OpenCodeClient hydration", () => {
     release!()
     await Promise.all([a, b])
     expect(calls).toBe(1)
+  })
+
+  it("hydrates status, permissions and questions from every session directory", async () => {
+    const urls: string[] = []
+    const otherSession = { ...session, id: "ses_2", directory: "/work" }
+    const fetchImpl = restMock((method, url) => {
+      urls.push(url)
+      if (url.endsWith("/event")) {
+        return new Response(
+          new ReadableStream({ start(c) { c.close() } }),
+          { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        )
+      }
+      const dir = new URL(url).searchParams.get("directory")
+      if (url.includes("/session/status")) {
+        if (dir === null) return jsonResponse(200, { ses_0: { type: "idle" } })
+        if (dir === "/work") return jsonResponse(200, { ses_2: { type: "busy" } })
+        return jsonResponse(200, { ses_1: { type: "error", message: "boom" } })
+      }
+      if (url.includes("/permission")) {
+        if (dir === "/work") {
+          return jsonResponse(200, [
+            {
+              id: "per_2",
+              sessionID: "ses_2",
+              permission: "bash",
+              patterns: ["ls"],
+              metadata: {},
+              always: [],
+              tool: { messageID: "m", callID: "c" },
+              time: { created: 1 },
+            },
+          ])
+        }
+        return jsonResponse(200, [])
+      }
+      if (url.includes("/question")) {
+        const question = (id: string, sessionID: string) => ({
+          id,
+          sessionID,
+          questions: [{ question: "q", header: "h", options: [] }],
+          time: { created: 1 },
+        })
+        if (dir === "/tmp") return jsonResponse(200, [question("que_1", "ses_1")])
+        if (dir === "/work") return jsonResponse(200, [question("que_2", "ses_2")])
+        return jsonResponse(200, [])
+      }
+      if (url.endsWith("/session")) return jsonResponse(200, [session, otherSession])
+      return jsonResponse(404, {})
+    })
+    const client = new OpenCodeClient({
+      url: "http://x",
+      fetchImpl,
+      autoConnect: false,
+      minBackoffMs: 5,
+      maxBackoffMs: 20,
+      reconnect: false,
+    })
+    client.connect()
+    await vi.waitFor(() => expect(client.store.state.sessions).toHaveLength(2), { timeout: 3000 })
+    await vi.waitFor(() => expect(client.store.state.questions).toHaveLength(2), { timeout: 3000 })
+    expect(client.store.state.status["ses_0"]?.type).toBe("idle")
+    expect(client.store.state.status["ses_1"]?.type).toBe("error")
+    expect(client.store.state.status["ses_2"]?.type).toBe("busy")
+    expect(client.store.state.permissions.map((p) => p.id)).toEqual(["per_2"])
+    expect(client.store.state.questions.map((q) => q.id)).toEqual(["que_1", "que_2"])
+    expect(urls.some((u) => u.endsWith("/question"))).toBe(true)
+    expect(urls.some((u) => u.endsWith("/question?directory=%2Ftmp"))).toBe(true)
+    expect(urls.some((u) => u.endsWith("/question?directory=%2Fwork"))).toBe(true)
+    client.disconnect()
   })
 
   it("rehydrates loaded sessions after reconnect", async () => {
@@ -187,5 +257,97 @@ describe("OpenCodeClient hydration", () => {
     // wait for the stream to close and the client to reconnect + rehydrate
     await vi.waitFor(() => expect(messageCalls).toBeGreaterThanOrEqual(2), { timeout: 5000 })
     client.disconnect()
+  })
+})
+
+describe("OpenCodeClient global event stream", () => {
+  it("connects to /global/event and unwraps the GlobalEvent payload", async () => {
+    const urls: string[] = []
+    const fetchImpl = restMock((method, url) => {
+      urls.push(url)
+      if (url.endsWith("/global/event")) {
+        return new Response(
+          new ReadableStream({
+            start(c) {
+              c.enqueue(
+                new TextEncoder().encode(
+                  'data: {"directory":"/tmp","project":"p","payload":{"id":"e1","type":"session.created","properties":{"sessionID":"ses_1","info":{"id":"ses_1","projectID":"p","directory":"/tmp","time":{"created":1,"updated":2}}}}}\n\n',
+                ),
+              )
+              c.close()
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        )
+      }
+      if (url.endsWith("/session")) return jsonResponse(200, [])
+      if (url.includes("/session/status")) return jsonResponse(200, {})
+      if (url.includes("/permission")) return jsonResponse(200, [])
+      if (url.includes("/question")) return jsonResponse(200, [])
+      return jsonResponse(200, {})
+    })
+    const client = new OpenCodeClient({
+      url: "http://x",
+      fetchImpl,
+      autoConnect: false,
+      reconnect: false,
+      minBackoffMs: 5,
+      maxBackoffMs: 20,
+    })
+    client.connect()
+    await vi.waitFor(() => expect(client.store.state.sessions.some((s) => s.id === "ses_1")).toBe(true), {
+      timeout: 3000,
+    })
+    expect(urls.some((u) => u.endsWith("/global/event"))).toBe(true)
+    client.disconnect()
+  })
+})
+
+describe("OpenCodeClient instance scoping", () => {
+  it("replies to questions and permissions on the session's instance", async () => {
+    const urls: string[] = []
+    const fetchImpl = restMock((method, url) => {
+      urls.push(url)
+      return jsonResponse(200, null)
+    })
+    const client = new OpenCodeClient({ url: "http://x", fetchImpl, autoConnect: false })
+    client.store.upsertSession({ ...session, directory: "/work" })
+    client.store.setQuestions([
+      { id: "que_9", sessionID: "ses_1", questions: [{ question: "q", header: "h", options: [] }], time: { created: 1 } },
+    ])
+    client.store.setPermissions([
+      {
+        id: "per_9",
+        sessionID: "ses_1",
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        tool: { messageID: "m", callID: "c" },
+        time: { created: 1 },
+      },
+    ])
+    await client.replyQuestion("que_9", [["yes"]])
+    await client.rejectQuestion("que_9")
+    await client.replyPermission("per_9", "once")
+    expect(urls).toEqual([
+      "http://x/question/que_9/reply?directory=%2Fwork",
+      "http://x/question/que_9/reject?directory=%2Fwork",
+      "http://x/permission/per_9/reply?directory=%2Fwork",
+    ])
+  })
+
+  it("omits the directory param when the session is unknown", async () => {
+    const urls: string[] = []
+    const fetchImpl = restMock((method, url) => {
+      urls.push(url)
+      return jsonResponse(200, null)
+    })
+    const client = new OpenCodeClient({ url: "http://x", fetchImpl, autoConnect: false })
+    client.store.setQuestions([
+      { id: "que_9", sessionID: "ses_gone", questions: [{ question: "q", header: "h", options: [] }], time: { created: 1 } },
+    ])
+    await client.replyQuestion("que_9", [["yes"]])
+    expect(urls).toEqual(["http://x/question/que_9/reply"])
   })
 })

@@ -24,8 +24,8 @@ No state library required: the store is a small external store consumed through 
    useSyncExternalStore → hooks (stable per-slice references)
 ```
 
-- One client, one SSE connection. Events (`session.created`, `message.part.updated`, `permission.asked`, …) are applied to the store as immutable slice updates.
-- On connect and on reconnect the store re-hydrates from REST (`/session`, `/session/status`, `/permission`, `/question`), and re-fetches messages for sessions you have already loaded.
+- One client, one SSE connection to `/global/event`, so events from every server instance (directory) reach the store. Each frame is a wrapped `{ directory, project, payload }`; the client unwraps `payload` before applying it. (Set `eventPath: "/event"` to pin a single instance instead. `/event` without `?directory=` only covers the server's default instance and emits nothing for other projects.)
+- On connect and on reconnect the store re-hydrates from REST (`/session`, `/session/status`, `/permission`, `/question`), and re-fetches messages for sessions you have already loaded. Because `/session/status`, `/permission` and `/question` are instance-scoped, hydration fans out to every directory present in the session list (plus the default instance) and merges the results.
 - Message history is loaded lazily per session (when a `useMessages(sessionID)` hook mounts) to keep startup light.
 - SSE reconnects with exponential backoff (500 ms → 30 s by default).
 
@@ -246,6 +246,6 @@ On NixOS, run e2e inside the flake dev shell (`nix develop`) — it provides Nod
 
 ## API notes
 
-- Targets the **v1 server API** (root paths: `/session`, `/event`, …) used by the opencode web app. The newer `/api/*` (v2) surface is not wrapped.
+- Targets the **v1 server API** (root paths: `/session`, `/global/event`, …) used by the opencode web app. The newer `/api/*` (v2) surface is not wrapped.
 - The server exposes an OpenAPI spec at `GET /doc` — types in `src/types.ts` are hand-written against it for the entities a frontend needs.
 - Events are envelope objects: `{ id: "evt_…", type, properties }`. The store knows the event types a frontend cares about and ignores the rest (new server events won't break the lib).
