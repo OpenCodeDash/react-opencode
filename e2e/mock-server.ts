@@ -26,10 +26,9 @@ export async function startMockOpencode(): Promise<MockOpencode> {
   const createdSessions = new Map<string, unknown>([[demoSession.id, demoSession]])
 
   function sendEvent(event: unknown) {
-    // The real server wraps every event on /global/event in a GlobalEvent, so
-    // mirror that shape: the client unwraps `payload` before applying it.
-    const frame = { directory: "/tmp", project: "prj_mock", payload: event }
-    for (const c of clients) c.write(`data: ${JSON.stringify(frame)}\n\n`)
+    for (const c of clients) {
+      c.write(`data: ${JSON.stringify({ directory: "/", project: "global", payload: event })}\n\n`)
+    }
   }
 
   function scriptPrompt(sessionID: string, userText: string) {
@@ -152,7 +151,7 @@ export async function startMockOpencode(): Promise<MockOpencode> {
     if (req.method === "GET" && url.pathname === "/global/event") {
       res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" })
       res.write(
-        `data: ${JSON.stringify({ directory: "/tmp", project: "prj_mock", payload: { id: "evt_boot", type: "server.connected", properties: {} } })}\n\n`,
+        'data: {"directory":"/","project":"global","payload":{"id":"evt_boot","type":"server.connected","properties":{}}}\n\n',
       )
       clients.push(res)
       res.on("close", () => {

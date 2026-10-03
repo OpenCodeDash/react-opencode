@@ -29,13 +29,15 @@ async function startMockServer(): Promise<MockServer> {
       res.end(JSON.stringify(body))
     }
 
-    if (req.method === "GET" && (url.pathname === "/event" || url.pathname === "/global/event")) {
+    if (req.method === "GET" && url.pathname === "/global/event") {
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
       })
-      res.write('data: {"id":"evt_boot","type":"server.connected","properties":{}}\n\n')
+      res.write(
+        'data: {"directory":"/tmp","project":"global","payload":{"id":"evt_boot","type":"server.connected","properties":{}}}\n\n',
+      )
       clients.push(res)
       req.on("close", () => {
         const i = clients.indexOf(res)
@@ -90,7 +92,11 @@ async function startMockServer(): Promise<MockServer> {
     url: `http://127.0.0.1:${port}`,
     clients,
     sendEvent: (event) => {
-      for (const client of clients) client.write(`data: ${JSON.stringify(event)}\n\n`)
+      for (const client of clients) {
+        client.write(
+          `data: ${JSON.stringify({ directory: "/tmp", project: "global", payload: event })}\n\n`,
+        )
+      }
     },
     close: () =>
       new Promise<void>((resolve) => {

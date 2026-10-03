@@ -118,9 +118,10 @@ export class OpenCodeClient {
   async connect(): Promise<void> {
     if (this.stream) return
     const opts: EventStreamOptions = {
-      // `/event` is scoped to the server's default instance (its cwd) and emits
-      // nothing for sessions in other directories; `/global/event` carries every
-      // instance's events (each GlobalEvent's `payload` is unwrapped by EventStream).
+      // `/global/event` streams events from every directory/project, whereas
+      // `/event` only streams the server's default directory. The dashboard is
+      // multi-directory, so default to the global stream (and unwrap its
+      // envelope in `parseEvent`).
       url: `${this.url}${this.options.eventPath ?? "/global/event"}`,
       fetchImpl: this.fetchImpl,
       onEvent: (event) => this.store.apply(event),

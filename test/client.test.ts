@@ -113,7 +113,7 @@ describe("OpenCodeClient hydration", () => {
     client.connect()
     await vi.waitFor(() => expect(client.store.state.sessions).toHaveLength(1), { timeout: 3000 })
     expect(client.store.state.status["ses_1"]?.type).toBe("busy")
-    expect(urls.some((u) => u.endsWith("/event"))).toBe(true)
+    expect(urls.some((u) => u.endsWith("/global/event"))).toBe(true)
     expect(urls.some((u) => u.endsWith("/session"))).toBe(true)
     expect(urls.some((u) => u.endsWith("/session/status"))).toBe(true)
     client.disconnect()

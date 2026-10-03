@@ -1,4 +1,4 @@
-import type { EventEnvelope } from "../types"
+import type { EventEnvelope, GlobalEventEnvelope } from "../types"
 
 export interface EventStreamOptions {
   url: string
@@ -30,10 +30,15 @@ export function parseSseChunk(buffer: string): { events: string[]; rest: string 
 
 function parseEvent(raw: string): EventEnvelope | null {
   try {
-    const parsed = JSON.parse(raw) as EventEnvelope & { payload?: EventEnvelope }
-    if (parsed && typeof parsed.type === "string") return parsed
-    // `/global/event` wraps each instance event as `{ directory, project, payload }`.
-    if (parsed?.payload && typeof parsed.payload.type === "string") return parsed.payload
+    const parsed = JSON.parse(raw) as EventEnvelope | GlobalEventEnvelope
+    if (parsed && typeof (parsed as EventEnvelope).type === "string") {
+      return parsed as EventEnvelope
+    }
+    // `/global/event` wraps each event in an envelope that also carries the
+    // originating directory/project. Unwrap it so consumers see the same shape
+    // as the per-instance `/event` stream.
+    const payload = (parsed as GlobalEventEnvelope)?.payload
+    if (payload && typeof payload.type === "string") return payload
     return null
   } catch {
     return null
