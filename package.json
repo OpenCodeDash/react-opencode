@@ -1,6 +1,6 @@
 {
   "name": "react-opencode",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Reactive React hooks and actions for the opencode server",
   "type": "module",
   "main": "./dist/index.cjs",
