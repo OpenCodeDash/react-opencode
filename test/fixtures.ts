@@ -76,6 +76,16 @@ export function partUpdatedEvent(part: Part): EventEnvelope {
   return makeEvent("message.part.updated", { sessionID: part.sessionID, part })
 }
 
+export function partDeltaEvent(part: Part, field: string, delta: string): EventEnvelope {
+  return makeEvent("message.part.delta", {
+    sessionID: part.sessionID,
+    messageID: part.messageID,
+    partID: part.id,
+    field,
+    delta,
+  })
+}
+
 export function partRemovedEvent(part: Part): EventEnvelope {
   return makeEvent("message.part.removed", {
     sessionID: part.sessionID,
