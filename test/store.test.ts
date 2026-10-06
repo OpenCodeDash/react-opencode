@@ -141,6 +141,27 @@ describe("Store", () => {
     expect(store.state.parts[message.id]![0]!.text).toBe("")
   })
 
+  it("rejects a non-string message.part.delta without corrupting the part", () => {
+    const store = new Store()
+    const sessionID = "ses_delta_bad"
+    const message = makeMessage(sessionID, { id: "msg_delta_bad", role: "assistant" })
+    const part = makeTextPart(sessionID, message.id, "Hi")
+    store.apply(messageUpdatedEvent(sessionID, message))
+    store.apply(partUpdatedEvent(part))
+
+    const malformed = (delta: unknown) =>
+      makeEvent("message.part.delta", {
+        sessionID,
+        messageID: message.id,
+        partID: part.id,
+        field: "text",
+        delta,
+      })
+    store.apply(malformed(undefined))
+    store.apply(malformed({ text: "x" }))
+    expect(store.state.parts[message.id]![0]!.text).toBe("Hi")
+  })
+
   it("applies message.part.removed", () => {
     const store = new Store()
     const sessionID = "ses_prm"

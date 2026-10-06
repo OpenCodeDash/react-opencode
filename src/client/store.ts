@@ -246,6 +246,9 @@ export class Store {
    * ignored; the eventual `message.part.updated` carries the full content.
    */
   appendPartDelta(messageID: MessageID, partID: PartID, field: string, delta: string): void {
+    // Events are parsed without schema validation, so treat the wire value as
+    // untrusted: a missing/non-string delta must not be concatenated in.
+    if (typeof delta !== "string") return
     const map = this.partIndex.get(messageID)
     if (!map) return
     const part = map.get(partID)
