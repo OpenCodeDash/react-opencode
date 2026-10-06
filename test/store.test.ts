@@ -8,6 +8,7 @@ import {
   makeToolPart,
   messageRemovedEvent,
   messageUpdatedEvent,
+  partDeltaEvent,
   partRemovedEvent,
   partUpdatedEvent,
   sessionEvent,
@@ -101,6 +102,43 @@ describe("Store", () => {
     store.apply(partUpdatedEvent(streamed))
     expect(store.state.parts[message.id]!).toHaveLength(1)
     expect(store.state.parts[message.id]![0]!.text).toBe("Hello")
+  })
+
+  it("appends message.part.delta deltas to an existing part", () => {
+    const store = new Store()
+    const sessionID = "ses_delta"
+    const message = makeMessage(sessionID, { id: "msg_delta", role: "assistant" })
+    const part = makeTextPart(sessionID, message.id, "")
+    store.apply(messageUpdatedEvent(sessionID, message))
+    store.apply(partUpdatedEvent(part))
+    expect(store.state.parts[message.id]![0]!.text).toBe("")
+
+    store.apply(partDeltaEvent(part, "text", "Hel"))
+    store.apply(partDeltaEvent(part, "text", "lo"))
+    expect(store.state.parts[message.id]![0]!.text).toBe("Hello")
+
+    // The final full update replaces the part, so accumulated deltas are not doubled.
+    store.apply(partUpdatedEvent({ ...part, text: "Hello" }))
+    expect(store.state.parts[message.id]!).toHaveLength(1)
+    expect(store.state.parts[message.id]![0]!.text).toBe("Hello")
+  })
+
+  it("ignores message.part.delta for unknown parts or non-string fields", () => {
+    const store = new Store()
+    const sessionID = "ses_delta_orphan"
+    const message = makeMessage(sessionID, { id: "msg_delta_orphan", role: "assistant" })
+    const part = makeTextPart(sessionID, message.id, "")
+
+    // Delta before the part exists is dropped.
+    store.apply(partDeltaEvent(part, "text", "orphan"))
+    expect(store.state.parts[message.id]).toBeUndefined()
+
+    store.apply(messageUpdatedEvent(sessionID, message))
+    store.apply(partUpdatedEvent(part))
+    const version = store.state.version
+    store.apply(partDeltaEvent(part, "state", "nope"))
+    expect(store.state.version).toBe(version)
+    expect(store.state.parts[message.id]![0]!.text).toBe("")
   })
 
   it("applies message.part.removed", () => {

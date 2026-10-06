@@ -238,6 +238,26 @@ export class Store {
     })
   }
 
+  /**
+   * Append a streamed delta to a field of an existing part. The server sends
+   * streamed text/reasoning as `message.part.delta` events (the full part only
+   * arrives once at creation and once at completion), so without this the part
+   * would appear empty until the response finished. Unknown parts/fields are
+   * ignored; the eventual `message.part.updated` carries the full content.
+   */
+  appendPartDelta(messageID: MessageID, partID: PartID, field: string, delta: string): void {
+    const map = this.partIndex.get(messageID)
+    if (!map) return
+    const part = map.get(partID)
+    if (!part) return
+    const current = (part as unknown as Record<string, unknown>)[field]
+    if (typeof current !== "string") return
+    map.set(partID, { ...part, [field]: current + delta } as Part)
+    this.commit({
+      parts: { ...this.state.parts, [messageID]: this.rebuildParts(messageID) },
+    })
+  }
+
   setTodos(sessionID: SessionID, todos: Todo[]): void {
     this.todoIndex.set(sessionID, todos)
     this.commit({ todos: { ...this.state.todos, [sessionID]: todos } })
@@ -362,6 +382,14 @@ export class Store {
         return
       case "message.part.updated":
         this.upsertPart(props.part as Part)
+        return
+      case "message.part.delta":
+        this.appendPartDelta(
+          props.messageID as MessageID,
+          props.partID as PartID,
+          props.field as string,
+          props.delta as string,
+        )
         return
       case "message.part.removed":
         this.removePart(props.messageID as MessageID, props.partID as PartID)

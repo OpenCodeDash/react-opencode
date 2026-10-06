@@ -433,6 +433,13 @@ export interface MessagePartUpdatedProps {
   sessionID: SessionID
   part: Part
 }
+export interface MessagePartDeltaProps {
+  sessionID: SessionID
+  messageID: MessageID
+  partID: PartID
+  field: string
+  delta: string
+}
 export interface MessagePartRemovedProps {
   sessionID: SessionID
   messageID: MessageID
@@ -492,6 +499,7 @@ export type KnownEventMap = {
   "message.updated": MessageUpdatedProps
   "message.removed": MessageRemovedProps
   "message.part.updated": MessagePartUpdatedProps
+  "message.part.delta": MessagePartDeltaProps
   "message.part.removed": MessagePartRemovedProps
   "permission.asked": PermissionAskedProps
   "permission.replied": PermissionRepliedProps
