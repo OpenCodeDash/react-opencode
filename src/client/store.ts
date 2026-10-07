@@ -74,6 +74,24 @@ function compareSessions(a: Session, b: Session): number {
   return b.time.updated - a.time.updated
 }
 
+// Length of a part's streamed `text`, when it has one (text/reasoning parts).
+function partTextLength(part: Part): number | null {
+  const text = (part as { text?: unknown }).text
+  return typeof text === "string" ? text.length : null
+}
+
+// A part snapshot fetched over HTTP can be older than the local copy while a
+// response is streaming: the server only fills `text` at part creation and
+// completion, so mid-stream it still reports the (near-)empty creation copy
+// while the growing content arrives via `message.part.delta`. Text only ever
+// grows for a given part, so a snapshot carrying less text than we already
+// hold is stale and must not replace it.
+function isStalePart(existing: Part, incoming: Part): boolean {
+  const have = partTextLength(existing)
+  const next = partTextLength(incoming)
+  return have != null && next != null && have > next
+}
+
 export class Store {
   state: StoreState
 
@@ -198,9 +216,21 @@ export class Store {
     }
     for (const entry of entries) {
       map.set(entry.info.id, entry.info)
-      const partMap = new Map<PartID, Part>()
-      for (const part of entry.parts) partMap.set(part.id, part)
-      this.partIndex.set(entry.info.id, partMap)
+      // Merge into any parts already known for this message instead of
+      // replacing them. A snapshot fetched mid-stream (resume refresh, event
+      // reconnect) can lag the deltas already applied to a live part and may
+      // not yet list one that was just created, so replacing would truncate
+      // streamed text/reasoning back to the server's stale copy (#144).
+      let partMap = this.partIndex.get(entry.info.id)
+      if (!partMap) {
+        partMap = new Map<PartID, Part>()
+        this.partIndex.set(entry.info.id, partMap)
+      }
+      for (const part of entry.parts) {
+        const existing = partMap.get(part.id)
+        if (existing && isStalePart(existing, part)) continue
+        partMap.set(part.id, part)
+      }
     }
     const parts: Record<MessageID, Part[]> = { ...this.state.parts }
     for (const entry of entries) {
