@@ -123,6 +123,42 @@ describe("Store", () => {
     expect(store.state.parts[message.id]![0]!.text).toBe("Hello")
   })
 
+  it("setMessages does not clobber streamed text with a stale snapshot", () => {
+    const store = new Store()
+    const sessionID = "ses_refresh"
+    const message = makeMessage(sessionID, { id: "msg_refresh", role: "assistant" })
+    const part = makeTextPart(sessionID, message.id, "")
+    store.apply(messageUpdatedEvent(sessionID, message))
+    store.apply(partUpdatedEvent(part))
+    store.apply(partDeltaEvent(part, "text", "Hello"))
+    store.apply(partDeltaEvent(part, "text", " world"))
+
+    // A resume refresh (visibility/focus) refetches the newest chunk. The
+    // server's snapshot of a part still being streamed is stale (here empty),
+    // so it must not overwrite text already accumulated from deltas.
+    store.setMessages(sessionID, [{ info: message, parts: [{ ...part, text: "" }] }])
+    expect(store.state.parts[message.id]![0]!.text).toBe("Hello world")
+
+    // A genuinely newer snapshot (the completion update) still wins.
+    store.setMessages(sessionID, [{ info: message, parts: [{ ...part, text: "Hello world!" }] }])
+    expect(store.state.parts[message.id]![0]!.text).toBe("Hello world!")
+  })
+
+  it("setMessages keeps local parts absent from the snapshot", () => {
+    const store = new Store()
+    const sessionID = "ses_keep"
+    const message = makeMessage(sessionID, { id: "msg_keep", role: "assistant" })
+    const older = makeTextPart(sessionID, message.id, "older")
+    const live = makeTextPart(sessionID, message.id, "live")
+    store.apply(messageUpdatedEvent(sessionID, message))
+    store.apply(partUpdatedEvent(older))
+    store.apply(partUpdatedEvent(live))
+
+    // A refresh chunk that raced ahead of the live part must not drop it.
+    store.setMessages(sessionID, [{ info: message, parts: [older] }])
+    expect(store.state.parts[message.id]!.map((p) => p.id)).toEqual([older.id, live.id])
+  })
+
   it("ignores message.part.delta for unknown parts or non-string fields", () => {
     const store = new Store()
     const sessionID = "ses_delta_orphan"
