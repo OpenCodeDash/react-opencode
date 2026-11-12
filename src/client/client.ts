@@ -146,11 +146,11 @@ export class OpenCodeClient {
 
   private async hydrate(): Promise<void> {
     try {
-      // The session list is global, but /session/status, /permission and
-      // /question are instance-scoped: without a ?directory= param they only
-      // cover the server's default instance. Hydrate every instance that has
-      // sessions (plus the default one) and merge the results.
-      const sessions = (await this.get<Session[]>("/session").catch(() => [] as Session[])) ?? []
+      // /session/status, /permission and /question are instance-scoped:
+      // without a ?directory= param they only cover the server's default
+      // instance. Hydrate every instance that has sessions (plus the default
+      // one) and merge the results.
+      const sessions = (await this.listAllSessions().catch(() => [] as Session[])) ?? []
       this.store.setSessions(sessions)
       const directories = new Set<string>()
       for (const session of sessions) if (session.directory) directories.add(session.directory)
@@ -185,8 +185,22 @@ export class OpenCodeClient {
     return this.get<{ healthy: boolean; version: string }>("/global/health")
   }
 
-  listSessions() {
+  // GET /session is scoped to the server's current project, so it only sees
+  // sessions belonging to that project (the default `global` project for
+  // non-git directories). /experimental/session lists sessions across every
+  // project; fall back to /session on servers that do not expose it.
+  private async listAllSessions(): Promise<Session[]> {
+    try {
+      const sessions = await this.get<Session[]>("/experimental/session?limit=1000")
+      if (Array.isArray(sessions)) return sessions
+    } catch {
+      // older server without the experimental global session list
+    }
     return this.get<Session[]>("/session")
+  }
+
+  listSessions() {
+    return this.listAllSessions()
   }
 
   createSession(input: CreateSessionInput = {}): Promise<Session> {
