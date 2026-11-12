@@ -99,7 +99,7 @@ describe("OpenCodeClient hydration", () => {
       if (url.includes("/session/status")) return jsonResponse(200, { ses_1: { type: "busy" } })
       if (url.includes("/permission")) return jsonResponse(200, [])
       if (url.includes("/question")) return jsonResponse(200, [])
-      if (url.endsWith("/session")) return jsonResponse(200, [session])
+      if (url.includes("/experimental/session")) return jsonResponse(200, [session])
       return jsonResponse(404, {})
     })
     const client = new OpenCodeClient({
@@ -114,8 +114,74 @@ describe("OpenCodeClient hydration", () => {
     await vi.waitFor(() => expect(client.store.state.sessions).toHaveLength(1), { timeout: 3000 })
     expect(client.store.state.status["ses_1"]?.type).toBe("busy")
     expect(urls.some((u) => u.endsWith("/global/event"))).toBe(true)
-    expect(urls.some((u) => u.endsWith("/session"))).toBe(true)
+    expect(urls.some((u) => u.includes("/experimental/session"))).toBe(true)
     expect(urls.some((u) => u.endsWith("/session/status"))).toBe(true)
+    client.disconnect()
+  })
+
+  it("hydrates sessions from every project via the global list", async () => {
+    const urls: string[] = []
+    const nixos: Session = { ...session, id: "ses_nix", projectID: "prj_nix", directory: "/etc/nixos" }
+    const fetchImpl = restMock((method, url) => {
+      urls.push(url)
+      if (url.endsWith("/event")) {
+        return new Response(
+          new ReadableStream({ start(c) { c.close() } }),
+          { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        )
+      }
+      if (url.includes("/experimental/session")) return jsonResponse(200, [session, nixos])
+      // /session is project-scoped: it only sees the server's current project.
+      if (url.endsWith("/session")) return jsonResponse(200, [session])
+      if (url.includes("/session/status")) return jsonResponse(200, {})
+      if (url.includes("/permission")) return jsonResponse(200, [])
+      if (url.includes("/question")) return jsonResponse(200, [])
+      return jsonResponse(200, {})
+    })
+    const client = new OpenCodeClient({
+      url: "http://x",
+      fetchImpl,
+      autoConnect: false,
+      reconnect: false,
+      minBackoffMs: 5,
+      maxBackoffMs: 20,
+    })
+    client.connect()
+    await vi.waitFor(() => expect(client.store.state.sessions).toHaveLength(2), { timeout: 3000 })
+    expect(client.store.state.sessions.map((s) => s.id)).toContain("ses_nix")
+    expect(urls.some((u) => u.includes("/experimental/session"))).toBe(true)
+    client.disconnect()
+  })
+
+  it("falls back to /session when the global list is unavailable", async () => {
+    const urls: string[] = []
+    const fetchImpl = restMock((method, url) => {
+      urls.push(url)
+      if (url.endsWith("/event")) {
+        return new Response(
+          new ReadableStream({ start(c) { c.close() } }),
+          { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        )
+      }
+      if (url.includes("/experimental/session")) return jsonResponse(404, {})
+      if (url.endsWith("/session")) return jsonResponse(200, [session])
+      if (url.includes("/session/status")) return jsonResponse(200, {})
+      if (url.includes("/permission")) return jsonResponse(200, [])
+      if (url.includes("/question")) return jsonResponse(200, [])
+      return jsonResponse(200, {})
+    })
+    const client = new OpenCodeClient({
+      url: "http://x",
+      fetchImpl,
+      autoConnect: false,
+      reconnect: false,
+      minBackoffMs: 5,
+      maxBackoffMs: 20,
+    })
+    client.connect()
+    await vi.waitFor(() => expect(client.store.state.sessions).toHaveLength(1), { timeout: 3000 })
+    expect(urls.some((u) => u.includes("/experimental/session"))).toBe(true)
+    expect(urls.some((u) => u.endsWith("/session"))).toBe(true)
     client.disconnect()
   })
 
@@ -188,7 +254,7 @@ describe("OpenCodeClient hydration", () => {
         if (dir === "/work") return jsonResponse(200, [question("que_2", "ses_2")])
         return jsonResponse(200, [])
       }
-      if (url.endsWith("/session")) return jsonResponse(200, [session, otherSession])
+      if (url.includes("/experimental/session")) return jsonResponse(200, [session, otherSession])
       return jsonResponse(404, {})
     })
     const client = new OpenCodeClient({
@@ -236,7 +302,7 @@ describe("OpenCodeClient hydration", () => {
         messageCalls += 1
         return jsonResponse(200, [{ info: { id: "msg_r", sessionID: "ses_r", role: "user", time: { created: 1 } }, parts: [] }])
       }
-      if (url.endsWith("/session")) return jsonResponse(200, sseCalls >= 1 ? [session] : [])
+      if (url.includes("/experimental/session")) return jsonResponse(200, sseCalls >= 1 ? [session] : [])
       return jsonResponse(200, null)
     })
     const client = new OpenCodeClient({

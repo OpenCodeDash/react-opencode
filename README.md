@@ -25,7 +25,7 @@ No state library required: the store is a small external store consumed through 
 ```
 
 - One client, one SSE connection to `/global/event`, so events from every server instance (directory) reach the store. Each frame is a wrapped `{ directory, project, payload }`; the client unwraps `payload` before applying it. (Set `eventPath: "/event"` to pin a single instance instead. `/event` without `?directory=` only covers the server's default instance and emits nothing for other projects.)
-- On connect and on reconnect the store re-hydrates from REST (`/session`, `/session/status`, `/permission`, `/question`), and re-fetches messages for sessions you have already loaded. Because `/session/status`, `/permission` and `/question` are instance-scoped, hydration fans out to every directory present in the session list (plus the default instance) and merges the results.
+- On connect and on reconnect the store re-hydrates from REST (`/experimental/session`, `/session/status`, `/permission`, `/question`), and re-fetches messages for sessions you have already loaded. The session list comes from the cross-project endpoint (`/session` is project-scoped; the client falls back to it on older servers). Because `/session/status`, `/permission` and `/question` are instance-scoped, hydration fans out to every directory present in the session list (plus the default instance) and merges the results.
 - Message history is loaded lazily per session (when a `useMessages(sessionID)` hook mounts) to keep startup light.
 - SSE reconnects with exponential backoff (500 ms → 30 s by default).
 
